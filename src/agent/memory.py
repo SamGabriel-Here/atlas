@@ -54,8 +54,6 @@ class MemoryStore:
             self.enabled = False
             self.error = f"{type(exc).__name__}: {exc}"
 
-    # --- writes -------------------------------------------------------------
-
     def warm(self) -> str | None:
         """Force the local embedding model to load.
 
@@ -105,8 +103,6 @@ class MemoryStore:
         if not self.enabled or self._collection is None:
             raise RuntimeError("Long-term memory is disabled.")
         self._collection.delete(ids=[mem_id])
-
-    # --- reads --------------------------------------------------------------
 
     def recall(self, query: str, k: int | None = None, min_score: float | None = None) -> list[Memory]:
         """Nearest memories above the relevance floor.
@@ -162,8 +158,6 @@ class MemoryStore:
             return self._collection.count()
         except Exception:  # noqa: BLE001
             return 0
-
-    # --- helpers ------------------------------------------------------------
 
     @staticmethod
     def _build(mem_id: str, doc: str, meta: dict[str, Any] | None, dist: float | None) -> Memory:

@@ -4,7 +4,7 @@ A personal Claude agent that runs in your terminal. It reads and writes files in
 directories you nominate, searches the web, runs shell commands behind an
 approval gate, and remembers things about you across sessions.
 
-Built on the Anthropic API directly — no framework in between.
+Built on the Anthropic API directly, with no framework in between.
 
 ```
 › what did I decide about the trimeffects port?
@@ -25,7 +25,7 @@ cp .env.example .env      # then put your key in it
 ```
 
 Get an API key at [console.anthropic.com](https://console.anthropic.com/settings/keys),
-or run `ant auth login` and leave `ANTHROPIC_API_KEY` unset — the SDK picks up the
+or run `ant auth login` and leave `ANTHROPIC_API_KEY` unset, and the SDK picks up the
 profile automatically.
 
 First launch downloads a ~80 MB local embedding model for memory. It happens once,
@@ -54,33 +54,33 @@ In the REPL:
 
 ## What it can do
 
-**Files** — `read_file`, `write_file`, `edit_file`, `list_dir`, `find_files`,
+**Files.** `read_file`, `write_file`, `edit_file`, `list_dir`, `find_files`,
 `search_text`. Every path is resolved and checked against `ATLAS_WORKSPACE_ROOTS`
 before anything touches disk, so `..` traversal and symlinks pointing outside the
 workspace are refused rather than followed.
 
-**Web** — `web_search` and `web_fetch` run server-side on Anthropic's
+**Web.** `web_search` and `web_fetch` run server-side on Anthropic's
 infrastructure. Nothing to install, and results are filtered before they reach the
 context window.
 
-**Shell** — `run_command`. Destructive patterns (`rm -rf`, `sudo`, `curl | sh`,
+**Shell.** `run_command`. Destructive patterns (`rm -rf`, `sudo`, `curl | sh`,
 `dd of=`, force-push, fork bombs) are blocked outright. Read-only commands are
 allowlisted and run without interruption. Everything else prompts you for approval
 before it runs.
 
-**Memory** — `remember`, `recall`, `forget`, backed by a local Chroma vector store.
+**Memory.** `remember`, `recall`, `forget`, backed by a local Chroma vector store.
 Relevant memories are retrieved and injected automatically at the start of each
 turn, so you don't have to ask. Memory is local; nothing is sent anywhere except as
 context on your own requests.
 
 ## Configuration
 
-Everything lives in `.env` — see `.env.example` for the full list.
+Everything lives in `.env`. See `.env.example` for the full list.
 
 | Variable | Default | |
 |---|---|---|
 | `ATLAS_MODEL` | `claude-opus-5` | any current Claude model id |
-| `ATLAS_EFFORT` | `high` | `low`–`max`; how hard it thinks and works |
+| `ATLAS_EFFORT` | `high` | `low` to `max`; how hard it thinks and works |
 | `ATLAS_MAX_TOKENS` | `64000` | ceiling on thinking + response per turn |
 | `ATLAS_WORKSPACE_ROOTS` | `~/Desktop` | colon-separated; the only reachable dirs |
 | `ATLAS_SHELL_MODE` | `ask` | `ask`, `allowlist` (no prompts, deny unknown), `yolo` |
@@ -113,7 +113,7 @@ logs/                    JSONL traces (gitignored)
 
 **Why a manual loop instead of the SDK tool runner.** The runner is the usual
 recommendation, but it doesn't resume a turn that stops with
-`stop_reason: "pause_turn"` — it returns the paused turn as the final message. Since
+`stop_reason: "pause_turn"`. It returns the paused turn as the final message instead. Since
 this agent mixes client-side tools with server-side web search, which is exactly
 what triggers a pause, that would surface as a silently truncated answer with no
 error. The loop in `src/agent/loop.py` handles it explicitly, along with refusals
@@ -121,7 +121,7 @@ and token-ceiling truncation.
 
 **Relevance filtering is two-stage.** Embedding scores for short queries sit in a
 narrow band, and a *correct* hit for one query can score lower than an *incorrect*
-hit for another — measured here, 0.231 versus 0.363. So a single absolute cutoff
+hit for another: measured here, 0.231 versus 0.363. So a single absolute cutoff
 either leaks noise or drops real matches. An absolute floor answers "is anything
 relevant at all", then a relative floor keeps only what's competitive with the best
 hit. Both are tunable; the defaults were calibrated against the local model and are
@@ -155,7 +155,7 @@ resumption, refusal handling, and not returning tool results for server-side too
 - Cost figures are computed from list prices in `src/models/config.py`. Update them
   if you switch model tiers.
 - The shell allowlist is matched on the first word only, and commands containing
-  shell operators always prompt. It is a speed bump, not a sandbox — don't set
+  shell operators always prompt. It is a speed bump, not a sandbox, so don't set
   `ATLAS_SHELL_MODE=yolo` and walk away.
 - Long conversations aren't compacted. The 1M-token context window means this is
   unlikely to bite in a personal session, but a very long one will eventually

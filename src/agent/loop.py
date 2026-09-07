@@ -57,8 +57,6 @@ class Agent:
         # a model that does not support them falls back gracefully.
         self.supports_system_messages = True
 
-    # --- request construction ----------------------------------------------
-
     def _params(self) -> dict[str, Any]:
         return {
             "model": CONFIG.model,
@@ -80,8 +78,6 @@ class Agent:
             "tools": self.tools,
             "messages": self.session.messages,
         }
-
-    # --- one streamed request ----------------------------------------------
 
     def _stream_once(self):
         with self.client.messages.stream(**self._params()) as stream:
@@ -113,8 +109,6 @@ class Agent:
                 return self._stream_once()
             raise
 
-    # --- memory -------------------------------------------------------------
-
     def _inject_memories(self, user_input: str) -> None:
         if not self.memory.enabled:
             return
@@ -130,8 +124,6 @@ class Agent:
             # Fold into the user turn: replace the message we just appended.
             last = self.session.messages[-1]
             last["content"] = f"{preamble}\n\n---\n\n{last['content']}"
-
-    # --- the loop -----------------------------------------------------------
 
     def run_turn(self, user_input: str) -> str:
         """Run one user turn to completion. Returns the final assistant text."""

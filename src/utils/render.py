@@ -39,8 +39,6 @@ class ConsoleRenderer:
         self._mode: str | None = None
         self._wrote_any = False
 
-    # --- streaming ----------------------------------------------------------
-
     def _switch(self, mode: str) -> None:
         if self._mode == mode:
             return
@@ -73,8 +71,6 @@ class ConsoleRenderer:
         sys.stdout.flush()
         self._wrote_any = True
 
-    # --- structured events --------------------------------------------------
-
     def _end_line(self) -> None:
         if self._mode is not None:
             sys.stdout.write("\n")
@@ -97,8 +93,6 @@ class ConsoleRenderer:
         self._end_line()
         console.print(f"[dim]  ${cost:.4f} this session[/]", highlight=False)
         self._wrote_any = False
-
-    # --- prompts ------------------------------------------------------------
 
     def approve(self, command: str, reason: str) -> bool:
         """Ask the user before running an unrecognized shell command."""
