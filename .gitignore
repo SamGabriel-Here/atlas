@@ -1,0 +1,18 @@
+.env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.DS_Store
+
+data/memory/
+data/sessions/
+
+logs/*
+!logs/.gitkeep
+
+# packaging artifacts
+*.egg-info/
+build/
+dist/
