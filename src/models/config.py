@@ -20,14 +20,30 @@ LOG_DIR = PROJECT_ROOT / "logs"
 SESSION_DIR = DATA_DIR / "sessions"
 MEMORY_DIR = DATA_DIR / "memory"
 
-# Published list prices, USD per million tokens. Used only for the local cost
-# readout -- update alongside ATLAS_MODEL if you switch tiers.
-PRICING: dict[str, tuple[float, float]] = {
-    "claude-opus-5": (5.00, 25.00),
-    "claude-opus-4-8": (5.00, 25.00),
-    "claude-sonnet-5": (3.00, 15.00),
-    "claude-haiku-4-5": (1.00, 5.00),
-    "claude-fable-5": (10.00, 50.00),
+DEFAULT_MODEL = "claude-opus-5-5"
+
+# Published list prices, USD per million tokens: (input, output, cache read).
+# Used only for the local cost readout -- update alongside ATLAS_MODEL if you
+# switch tiers. Cache reads are listed per model because the ratio to input
+# varies (0.05x on Opus 5.5, 0.025x on Fable 5.1, 0.1x on most others).
+PRICING: dict[str, tuple[float, float, float]] = {
+    "claude-fable-5-1": (10.00, 50.00, 0.25),
+    "claude-fable-5": (10.00, 50.00, 1.00),
+    "claude-opus-5-5": (4.00, 20.00, 0.20),
+    "claude-opus-5": (5.00, 25.00, 0.50),
+    "claude-opus-4-8": (5.00, 25.00, 0.50),
+    "claude-sonnet-5-5": (2.00, 10.00, 0.20),
+    "claude-sonnet-5": (2.00, 10.00, 0.20),
+    "claude-haiku-5-5": (0.10, 0.50, 0.01),
+    "claude-haiku-4-5": (1.00, 5.00, 0.10),
+}
+
+# Models that bill a higher rate once the prompt passes a size threshold:
+# (threshold in prompt tokens, input, output, cache read) above it.
+# ponytail: Haiku 5.5's long-prompt cache-read rate is assumed at 0.1x input;
+# replace it when the published figure is known.
+LONG_PROMPT_PRICING: dict[str, tuple[int, float, float, float]] = {
+    "claude-haiku-5-5": (100_000, 0.50, 2.50, 0.05),
 }
 
 _TRUE = {"1", "true", "yes", "on"}
@@ -68,8 +84,7 @@ def _roots() -> list[Path]:
 # Defaults live here, not only in .env.example, so a fresh clone with no .env
 # still behaves sensibly instead of prompting for `ls`.
 DEFAULT_SHELL_ALLOWLIST = (
-    "ls,cat,head,tail,wc,grep,rg,find,file,stat,du,df,"
-    "git,python3,python,pip,pytest,node,npm,jq,which,echo,pwd,date"
+    "ls,cat,head,tail,wc,grep,rg,find,file,stat,du,df,git,jq,which,echo,pwd,date"
 )
 
 
@@ -80,7 +95,7 @@ def _allowlist() -> set[str]:
 
 @dataclass
 class Config:
-    model: str = field(default_factory=lambda: os.getenv("ATLAS_MODEL", "claude-opus-5"))
+    model: str = field(default_factory=lambda: os.getenv("ATLAS_MODEL", DEFAULT_MODEL))
     effort: str = field(default_factory=lambda: os.getenv("ATLAS_EFFORT", "high"))
     max_tokens: int = field(default_factory=lambda: _env_int("ATLAS_MAX_TOKENS", 64000))
 
@@ -99,23 +114,31 @@ class Config:
         default_factory=lambda: _env_float("ATLAS_MEMORY_REL_RATIO", 0.6)
     )
 
-    def price(self) -> tuple[float, float]:
-        """(input, output) USD per million tokens for the configured model."""
-        return PRICING.get(self.model, (0.0, 0.0))
+    def has_price(self) -> bool:
+        return self.model in PRICING
+
+    def price(self, prompt_tokens: int = 0) -> tuple[float, float, float]:
+        """(input, output, cache read) USD per million tokens for the configured model.
+
+        Unknown models price at zero; check has_price() to warn about that.
+        """
+        tier = LONG_PROMPT_PRICING.get(self.model)
+        if tier and prompt_tokens > tier[0]:
+            return tier[1:]
+        return PRICING.get(self.model, (0.0, 0.0, 0.0))
 
     def cost(self, usage) -> float:
         """Approximate USD for one response's usage object.
 
-        Cache writes bill at ~1.25x input, cache reads at ~0.1x.
+        Cache writes bill at 1.25x input (5-minute TTL); cache reads use the
+        model's own cache-read price.
         """
-        pin, pout = self.price()
         read = getattr(usage, "cache_read_input_tokens", 0) or 0
         write = getattr(usage, "cache_creation_input_tokens", 0) or 0
         fresh = getattr(usage, "input_tokens", 0) or 0
         out = getattr(usage, "output_tokens", 0) or 0
-        return (
-            fresh * pin + write * pin * 1.25 + read * pin * 0.1 + out * pout
-        ) / 1_000_000
+        pin, pout, pread = self.price(prompt_tokens=fresh + read + write)
+        return (fresh * pin + write * pin * 1.25 + read * pread + out * pout) / 1_000_000
 
 
 CONFIG = Config()

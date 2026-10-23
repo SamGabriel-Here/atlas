@@ -69,10 +69,21 @@ context window.
 
 ### Shell
 
-`run_command`. Destructive patterns (`rm -rf`, `sudo`, `curl | sh`,
-`dd of=`, force-push, fork bombs) are blocked outright. Read-only commands are
-allowlisted and run without interruption. Everything else prompts you for approval
-before it runs.
+`run_command`. Destructive patterns (`rm -r`/`-f`, `sudo`, `curl | sh`,
+`dd of=`, force-push, `git reset --hard`, `git clean -f`, `find -delete`, fork bombs)
+are blocked outright, including when they hide after a newline, inside `$(...)`, or
+behind `xargs`. Read-only commands are allowlisted and run without interruption, as
+long as every path they name is inside the workspace. Everything else prompts you for
+approval before it runs, including:
+
+- interpreters and installers (`python`, `node`, `pip`, `npm`, `pytest`, `sh`), even if
+  your own `ATLAS_SHELL_ALLOWLIST` lists them
+- any git subcommand that isn't read-only (`status`, `log`, `diff`, `show`, ...)
+- `find -exec` and `rg --pre`, which run another program
+
+The file tools also refuse to write inside a `.git` directory, where hooks and
+config run code on the next git command, and inside Atlas's own folder, whose `.env`
+and source decide what these guardrails allow.
 
 ### Memory
 
@@ -87,7 +98,7 @@ Everything lives in `.env`. See `.env.example` for the full list.
 
 | Variable | Default | |
 |---|---|---|
-| `ATLAS_MODEL` | `claude-opus-5` | any current Claude model id |
+| `ATLAS_MODEL` | `claude-opus-5-5` | any current Claude model id |
 | `ATLAS_EFFORT` | `high` | `low` to `max`; how hard it thinks and works |
 | `ATLAS_MAX_TOKENS` | `64000` | ceiling on thinking + response per turn |
 | `ATLAS_WORKSPACE_ROOTS` | `~/Desktop` | colon-separated; the only reachable dirs |
@@ -170,10 +181,11 @@ resumption, refusal handling, and not returning tool results for server-side too
 
 ## Limitations
 
-- Cost figures are computed from list prices in `src/models/config.py`. Update them
-  if you switch model tiers.
-- The shell allowlist is matched on the first word only, and commands containing
-  shell operators always prompt. It is a speed bump, not a sandbox, so don't set
+- Cost figures are computed from list prices in `src/models/config.py`. A model
+  missing from that table costs $0 in the readout, and Atlas says so at startup.
+- The shell gate is pattern matching, not isolation. It catches the common ways a
+  command reaches outside the workspace or runs other code, but approved commands run
+  with your full permissions. It is a speed bump, not a sandbox, so don't set
   `ATLAS_SHELL_MODE=yolo` and walk away.
 - Long conversations aren't compacted. The 1M-token context window means this is
   unlikely to bite in a personal session, but a very long one will eventually

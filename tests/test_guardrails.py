@@ -62,6 +62,110 @@ class TestClassifyCommand:
         assert classify_command("   ")[0] == "deny"
 
 
+class TestShellBypasses:
+    """Each case here was an auto-approved bypass before the allowlist was tightened."""
+
+    @pytest.fixture(autouse=True)
+    def ask_mode(self, workspace, monkeypatch):
+        from src.models import config as config_mod
+
+        monkeypatch.setattr(config_mod.CONFIG, "shell_mode", "ask")
+        monkeypatch.setattr(
+            config_mod.CONFIG, "shell_allowlist", set(config_mod.DEFAULT_SHELL_ALLOWLIST.split(","))
+        )
+        self.cwd = str(workspace)
+
+    def verdict(self, cmd):
+        return classify_command(cmd, cwd=self.cwd)[0]
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "cat ~/.ssh/id_rsa",               # read outside the workspace
+            "cat ../../etc/hosts",             # relative escape
+            "grep -r key /etc",                # absolute path argument
+            "python3 -c 'import os'",          # interpreter
+            "pip install requests",            # installer
+            "ls\npython3 x.py",                # newline smuggles a second command
+            "git -c core.pager=sh log",        # option before the subcommand runs code
+            "git checkout .",                  # discards work
+            "find . -exec cat {} +",           # find runs another program
+            "rg --pre sh pattern",             # rg preprocessor runs a program
+            "rg --pre=sh pattern",
+            "rm report.txt",                   # plain rm asks rather than being denied
+        ],
+    )
+    def test_asks(self, cmd):
+        assert self.verdict(cmd) == "ask"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        ["ls -la", "cat notes.md", "git log --oneline", "git status", "find . -name '*.py'"],
+    )
+    def test_read_only_inside_workspace_still_runs(self, cmd):
+        assert self.verdict(cmd) == "allow"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "rm -r build",
+            "rm -R build",
+            "rm --recursive build",
+            "ls\nrm -rf ~",
+            "echo $(rm -rf ~)",
+            "find . -print0 | xargs -0 rm -rf",
+            "git reset --hard HEAD~3",
+            "git clean -fdx",
+            "git push -f origin main",
+            "find . -name '*.log' -delete",
+        ],
+    )
+    def test_destructive_variants_are_denied(self, cmd):
+        assert self.verdict(cmd) == "deny"
+
+    def test_destructive_is_denied_even_in_yolo(self, monkeypatch):
+        from src.models import config as config_mod
+
+        monkeypatch.setattr(config_mod.CONFIG, "shell_mode", "yolo")
+        assert self.verdict("echo $(rm -rf ~)") == "deny"
+
+    def test_interpreter_on_a_users_allowlist_still_asks(self, monkeypatch):
+        # A .env copied from the old .env.example still names python3.
+        from src.models import config as config_mod
+
+        monkeypatch.setattr(config_mod.CONFIG, "shell_allowlist", {"ls", "python3", "pip"})
+        assert self.verdict("python3 x.py") == "ask"
+        assert self.verdict("pip install x") == "ask"
+
+    def test_allowlist_mode_denies_what_would_ask(self, monkeypatch):
+        from src.models import config as config_mod
+
+        monkeypatch.setattr(config_mod.CONFIG, "shell_mode", "allowlist")
+        assert self.verdict("cat ~/.ssh/id_rsa") == "deny"
+        assert self.verdict("ls") == "allow"
+
+
+class TestWriteProtection:
+    def test_refuses_write_inside_git_dir(self, workspace):
+        with pytest.raises(GuardrailError, match=r"\.git"):
+            safe_path(str(workspace / "repo" / ".git" / "hooks" / "pre-commit"), write=True)
+
+    def test_reading_git_dir_is_still_allowed(self, workspace):
+        target = workspace / ".git" / "HEAD"
+        target.parent.mkdir()
+        target.write_text("ref: refs/heads/main")
+        assert safe_path(str(target), must_exist=True) == target.resolve()
+
+    def test_refuses_write_to_atlas_own_files(self, monkeypatch):
+        from src.models import config as config_mod
+
+        root = config_mod.PROJECT_ROOT
+        monkeypatch.setattr(config_mod.CONFIG, "workspace_roots", [root.parent])
+        with pytest.raises(GuardrailError, match="Atlas's own files"):
+            safe_path(str(root / ".env"), write=True)
+        assert safe_path(str(root / "README.md")) == root / "README.md"
+
+
 class TestRedact:
     def test_masks_anthropic_key(self):
         out = redact("key is sk-ant-api03-AbCdEf123456789 ok")

@@ -220,6 +220,12 @@ def main() -> int:
     elif agent.memory.error:
         console.print(f"[yellow]Memory unavailable:[/] {agent.memory.error}")
 
+    if not CONFIG.has_price():
+        console.print(
+            f"[yellow]No price listed for {CONFIG.model}; cost readouts will show $0 until "
+            "it is added to PRICING in src/models/config.py.[/]"
+        )
+
     if args.prompt:
         agent.run_turn(args.prompt)
         return 0

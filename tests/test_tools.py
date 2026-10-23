@@ -99,8 +99,19 @@ class TestShellTool:
             shell.run_command(ctx=ctx, command="sudo rm -rf /", cwd=str(workspace))
 
     def test_nonzero_exit_is_reported_not_raised(self, ctx, workspace):
-        out = shell.run_command(ctx=ctx, command="ls /definitely/not/here", cwd=str(workspace))
+        out = shell.run_command(ctx=ctx, command="ls definitely-not-here", cwd=str(workspace))
         assert "exit" in out
+
+    def test_allowlisted_read_outside_workspace_asks(self, ctx, workspace):
+        # cat is allowlisted, but ~/.ssh is outside the workspace; the ctx declines.
+        out = shell.run_command(ctx=ctx, command="cat ~/.ssh/id_rsa", cwd=str(workspace))
+        assert "declined" in out.lower()
+
+    def test_write_file_refuses_git_directory(self, ctx, workspace):
+        from src.utils.guardrails import GuardrailError
+
+        with pytest.raises(GuardrailError, match=r"\.git"):
+            files.write_file(ctx=ctx, path=str(workspace / ".git" / "config"), content="x")
 
 
 class TestDispatch:
