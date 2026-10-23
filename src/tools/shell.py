@@ -30,7 +30,8 @@ def run_command(
     cwd: str | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> str:
-    verdict, reason = classify_command(command)
+    workdir = safe_path(cwd, must_exist=True) if cwd else safe_path(ctx.cwd, must_exist=True)
+    verdict, reason = classify_command(command, cwd=str(workdir))
 
     if verdict == "deny":
         raise GuardrailError(f"Refused: {reason}")
@@ -43,7 +44,6 @@ def run_command(
         if not ctx.approve(command=command, reason=reason):
             return "The user declined to run this command. Do not retry it; ask what they would prefer."
 
-    workdir = safe_path(cwd, must_exist=True) if cwd else safe_path(ctx.cwd, must_exist=True)
     timeout = max(1, min(int(timeout or DEFAULT_TIMEOUT), 600))
 
     try:

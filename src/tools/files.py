@@ -66,7 +66,7 @@ def read_file(ctx: ToolContext, path: str, start_line: int | None = None, end_li
     ),
 )
 def write_file(ctx: ToolContext, path: str, content: str) -> str:
-    target = safe_path(path)
+    target = safe_path(path, write=True)
     existed = target.exists()
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
@@ -86,8 +86,8 @@ def write_file(ctx: ToolContext, path: str, content: str) -> str:
     ),
 )
 def edit_file(ctx: ToolContext, path: str, old_string: str, new_string: str) -> str:
-    target = safe_path(path, must_exist=True)
-    original = target.read_text(encoding="utf-8")
+    target = safe_path(path, must_exist=True, write=True)
+    original =target.read_text(encoding="utf-8")
     hits = original.count(old_string)
     if hits == 0:
         return f"No match in {target}. The old_string was not found - re-read the file and copy the exact text."
